@@ -1,24 +1,55 @@
-from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+import os
+import random
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
+import astrbot.api.message_components as Comp
 
-@register("helloworld", "YourName", "一个简单的 Hello World 插件", "1.0.0")
+PLUGIN_DIR = os.path.dirname(__file__)
+IMAGE_DIR = os.path.join(PLUGIN_DIR, "maodie_img")
+
+@register("astrbot_plugin_maodie", "Jason.Joestar", "发送随机耄耋图片", "1.0.0") #
 class MyPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
+        self.image_files = [] # 初始化图片列表
 
     async def initialize(self):
-        """可选择实现异步的插件初始化方法，当实例化该插件类之后会自动调用该方法。"""
-    
-    # 注册指令的装饰器。指令名为 helloworld。注册成功后，发送 `/helloworld` 就会触发这个指令，并回复 `你好, {user_name}!`
-    @filter.command("helloworld")
-    async def helloworld(self, event: AstrMessageEvent):
-        """这是一个 hello world 指令""" # 这是 handler 的描述，将会被解析方便用户了解插件内容。建议填写。
-        user_name = event.get_sender_name()
-        message_str = event.message_str # 用户发的纯文本消息字符串
-        message_chain = event.get_messages() # 用户所发的消息的消息链 # from astrbot.api.message_components import *
-        logger.info(message_chain)
-        yield event.plain_result(f"Hello, {user_name}, 你发了 {message_str}!") # 发送一条纯文本消息
+        """插件初始化时加载图片列表"""
+        try:
+            if os.path.isdir(IMAGE_DIR):
+                self.image_files = [f for f in os.listdir(IMAGE_DIR) if os.path.isfile(os.path.join(IMAGE_DIR, f))]
+                if not self.image_files:
+                    logger.warning(f"插件 'maodie': 在 '{IMAGE_DIR}' 文件夹下未找到图片文件。")
+                else:
+                    logger.info(f"插件 'maodie': 成功加载 {len(self.image_files)} 张图片。")
+            else:
+                logger.error(f"插件 'maodie': 图片文件夹 '{IMAGE_DIR}' 不存在或不是一个目录。")
+        except Exception as e:
+            logger.error(f"插件 'maodie': 初始化时加载图片失败: {e}")
+
+    @filter.command("哈个气")
+    async def send_maodie_image(self, event: AstrMessageEvent):
+        if not self.image_files:
+            yield event.plain_result("错误：找不到图片文件。请检查插件文件夹。")
+            return
+
+        try:
+            random_image_name = random.choice(self.image_files)
+            image_path = os.path.join(IMAGE_DIR, random_image_name)
+
+            chain = [
+                Comp.Plain("耄耋来咯~"),
+                Comp.Image.fromFileSystem(image_path)
+            ]
+            yield event.chain_result(chain)
+
+        except FileNotFoundError:
+            logger.error(f"插件 'maodie': 选择的图片文件 '{image_path}' 未找到。")
+            yield event.plain_result("错误：无法找到选定的图片文件。")
+        except Exception as e:
+            logger.error(f"插件 'maodie': 发送图片时出错: {e}")
+            yield event.plain_result("发送图片时发生内部错误。")
 
     async def terminate(self):
         """可选择实现异步的插件销毁方法，当插件被卸载/停用时会调用。"""
